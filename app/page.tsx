@@ -393,15 +393,28 @@ export default function HomePage() {
         /* 骨架屏加载状态 */
         <div className="pt-20">
           {/* Hero 骨架屏 */}
-          <div className="relative h-[70vh] bg-gray-900 animate-pulse">
+          <div className="relative h-[70vh] bg-gradient-to-br from-black via-zinc-950 to-black">
+            {/* 动画光效 */}
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute -inset-[100%] animate-[spin_3s_linear_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+            </div>
+            
             <div className="absolute bottom-0 left-0 right-0 px-4 md:px-12 pb-12 md:pb-20">
               <div className="max-w-2xl space-y-4">
-                <div className="h-16 bg-gray-800 rounded w-3/4" />
-                <div className="h-6 bg-gray-800 rounded w-1/2" />
-                <div className="h-20 bg-gray-800 rounded w-full" />
-                <div className="flex space-x-3">
-                  <div className="h-12 bg-gray-800 rounded w-32" />
-                  <div className="h-12 bg-gray-800 rounded w-32" />
+                {/* 标题骨架 */}
+                <div className="h-16 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-3/4 animate-pulse" />
+                {/* 副标题骨架 */}
+                <div className="h-6 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-1/2 animate-pulse" />
+                {/* 描述骨架 */}
+                <div className="space-y-2">
+                  <div className="h-5 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-full animate-pulse" />
+                  <div className="h-5 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-5/6 animate-pulse" />
+                  <div className="h-5 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-4/5 animate-pulse" />
+                </div>
+                {/* 按钮骨架 */}
+                <div className="flex space-x-3 pt-2">
+                  <div className="h-12 bg-gradient-to-r from-zinc-800 to-zinc-900 rounded-lg w-32 animate-pulse" />
+                  <div className="h-12 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-32 animate-pulse" />
                 </div>
               </div>
             </div>
@@ -411,12 +424,24 @@ export default function HomePage() {
           <div className="relative z-20 -mt-8 space-y-12 pb-16">
             {[1, 2, 3].map((i) => (
               <div key={i} className="px-4 md:px-12">
-                <div className="h-8 bg-gray-800 rounded w-48 mb-4 animate-pulse" />
+                {/* 分类标题骨架 */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-br from-zinc-900 to-black rounded-lg animate-pulse" />
+                  <div className="h-8 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-48 animate-pulse" />
+                </div>
+                
+                {/* 影片卡片骨架 */}
                 <div className="flex space-x-4 overflow-hidden">
                   {[1, 2, 3, 4, 5, 6].map((j) => (
                     <div key={j} className="flex-shrink-0 w-48 md:w-56">
-                      <div className="aspect-[2/3] bg-gray-800 rounded-lg animate-pulse" />
-                      <div className="h-6 bg-gray-800 rounded w-3/4 mt-2 animate-pulse" />
+                      {/* 海报骨架 */}
+                      <div className="relative aspect-[2/3] bg-gradient-to-br from-zinc-950 via-black to-zinc-950 rounded-lg overflow-hidden">
+                        <div className="absolute inset-0 animate-pulse bg-gradient-to-tr from-transparent via-white/5 to-transparent" />
+                      </div>
+                      {/* 标题骨架 */}
+                      <div className="h-6 bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-lg w-3/4 mt-2 animate-pulse" />
+                      {/* 评分骨架 */}
+                      <div className="h-4 bg-gradient-to-r from-zinc-900 to-zinc-900/30 rounded-lg w-1/2 mt-1 animate-pulse" />
                     </div>
                   ))}
                 </div>
