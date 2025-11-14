@@ -9,7 +9,7 @@ export interface ToastState {
 export interface ConfirmState {
   title: string;
   message: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   danger?: boolean;
 }
 

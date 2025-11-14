@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { VodSource } from '@/types/drama';
 import { presetVodSources } from '@/lib/preset-vod-sources';
+import { Modal } from '@/components/Modal';
 import type { VodSourcesTabProps } from './types';
 
 export function VodSourcesTab({
@@ -67,8 +68,6 @@ export function VodSourcesTab({
   };
 
   const handleAdd = () => {
-    setIsAddMode(true);
-    setEditingSource(null);
     setFormData({
       key: '',
       name: '',
@@ -76,12 +75,14 @@ export function VodSourcesTab({
       playUrl: '',
       type: 'json',
     });
+    setIsAddMode(true);
+    setEditingSource(null);
   };
 
   const handleEdit = (source: VodSource) => {
-    setIsAddMode(false);
-    setEditingSource(source);
     setFormData({ ...source });
+    setEditingSource(source);
+    setIsAddMode(false);
   };
 
   const handleDelete = (key: string) => {
@@ -166,8 +167,7 @@ export function VodSourcesTab({
 
       if (result.code === 200) {
         onSourcesChange(newSources);
-        setEditingSource(null);
-        setIsAddMode(false);
+        handleCancel();
         onShowToast({ message: '保存成功', type: 'success' });
       } else {
         onShowToast({
@@ -228,105 +228,105 @@ export function VodSourcesTab({
         </button>
       </div>
 
-      {/* Edit/Add Form */}
-      {(editingSource || isAddMode) && (
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-blue-500">
-          <h2 className="text-xl font-bold text-white mb-4">
-            {isAddMode ? '添加视频源' : '编辑视频源'}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Key (唯一标识)
-              </label>
-              <input
-                type="text"
-                value={formData.key}
-                onChange={(e) =>
-                  setFormData({ ...formData, key: e.target.value })
-                }
-                disabled={!isAddMode}
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例如: rycjapi"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                名称
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例如: 如意资源站"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                API地址
-              </label>
-              <input
-                type="text"
-                value={formData.api}
-                onChange={(e) =>
-                  setFormData({ ...formData, api: e.target.value })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                播放地址
-              </label>
-              <input
-                type="text"
-                value={formData.playUrl}
-                onChange={(e) =>
-                  setFormData({ ...formData, playUrl: e.target.value })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                类型
-              </label>
-              <select
-                value={formData.type}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    type: e.target.value as 'json' | 'xml',
-                  })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="json">JSON</option>
-                <option value="xml">XML</option>
-              </select>
-            </div>
+      {/* Edit/Add Modal */}
+      <Modal
+        isOpen={!!(editingSource || isAddMode)}
+        onClose={handleCancel}
+        title={isAddMode ? '添加视频源' : '编辑视频源'}
+        size="lg"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Key (唯一标识)
+            </label>
+            <input
+              type="text"
+              value={formData.key}
+              onChange={(e) =>
+                setFormData({ ...formData, key: e.target.value })
+              }
+              disabled={!isAddMode}
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="例如: rycjapi"
+            />
           </div>
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={handleSave}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium"
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              名称
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="例如: 如意资源站"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              API地址
+            </label>
+            <input
+              type="text"
+              value={formData.api}
+              onChange={(e) =>
+                setFormData({ ...formData, api: e.target.value })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              播放地址
+            </label>
+            <input
+              type="text"
+              value={formData.playUrl}
+              onChange={(e) =>
+                setFormData({ ...formData, playUrl: e.target.value })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              类型
+            </label>
+            <select
+              value={formData.type}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  type: e.target.value as 'json' | 'xml',
+                })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              保存
-            </button>
-            <button
-              onClick={handleCancel}
-              className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition font-medium"
-            >
-              取消
-            </button>
+              <option value="json">JSON</option>
+              <option value="xml">XML</option>
+            </select>
           </div>
         </div>
-      )}
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={handleSave}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium"
+          >
+            保存
+          </button>
+          <button
+            onClick={handleCancel}
+            className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition font-medium"
+          >
+            取消
+          </button>
+        </div>
+      </Modal>
 
       {/* Sources List */}
       <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">

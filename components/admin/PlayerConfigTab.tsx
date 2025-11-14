@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Modal } from '@/components/Modal';
 import type { PlayerConfig, IframePlayer } from '@/app/api/player-config/route';
 import type { PlayerConfigTabProps } from './types';
 
@@ -55,8 +56,6 @@ export function PlayerConfigTab({
   };
 
   const handleAddPlayer = () => {
-    setIsAddingPlayer(true);
-    setEditingPlayer(null);
     setPlayerFormData({
       id: `player${Date.now()}`,
       name: '',
@@ -65,12 +64,14 @@ export function PlayerConfigTab({
       timeout: 10000,
       enabled: true,
     });
+    setIsAddingPlayer(true);
+    setEditingPlayer(null);
   };
 
   const handleEditPlayer = (player: IframePlayer) => {
-    setIsAddingPlayer(false);
-    setEditingPlayer(player);
     setPlayerFormData({ ...player });
+    setEditingPlayer(player);
+    setIsAddingPlayer(false);
   };
 
   const handleDeletePlayer = (playerId: string) => {
@@ -80,17 +81,17 @@ export function PlayerConfigTab({
     onShowConfirm({
       title: '删除播放器',
       message: `确定要删除「${playerToDelete?.name}」吗？`,
-      onConfirm: () => {
+      onConfirm: async () => {
         const newPlayers = playerConfig.iframePlayers.filter(
           (p) => p.id !== playerId
         );
-        handleSavePlayerConfig({ ...playerConfig, iframePlayers: newPlayers });
+        await handleSavePlayerConfig({ ...playerConfig, iframePlayers: newPlayers });
       },
       danger: true,
     });
   };
 
-  const handleSavePlayer = () => {
+  const handleSavePlayer = async () => {
     if (!playerFormData.name || !playerFormData.url) {
       onShowToast({ message: '请填写完整信息', type: 'warning' });
       return;
@@ -106,9 +107,8 @@ export function PlayerConfigTab({
       );
     }
 
-    handleSavePlayerConfig({ ...playerConfig, iframePlayers: newPlayers });
-    setIsAddingPlayer(false);
-    setEditingPlayer(null);
+    await handleSavePlayerConfig({ ...playerConfig, iframePlayers: newPlayers });
+    handleCancelPlayerEdit();
   };
 
   const handleCancelPlayerEdit = () => {
@@ -383,93 +383,93 @@ export function PlayerConfigTab({
         </div>
       </div>
 
-      {/* 播放器编辑表单 */}
-      {(editingPlayer || isAddingPlayer) && (
-        <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-blue-500">
-          <h2 className="text-xl font-bold text-white mb-4">
-            {isAddingPlayer ? '添加iframe播放器' : '编辑iframe播放器'}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                播放器名称
-              </label>
-              <input
-                type="text"
-                value={playerFormData.name}
-                onChange={(e) =>
-                  setPlayerFormData({ ...playerFormData, name: e.target.value })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例如: 备用播放器1"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                播放器URL
-              </label>
-              <input
-                type="text"
-                value={playerFormData.url}
-                onChange={(e) =>
-                  setPlayerFormData({ ...playerFormData, url: e.target.value })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="https://jx.example.com/?url="
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                优先级（数字越小越优先）
-              </label>
-              <input
-                type="number"
-                value={playerFormData.priority}
-                onChange={(e) =>
-                  setPlayerFormData({
-                    ...playerFormData,
-                    priority: parseInt(e.target.value) || 1,
-                  })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                min="1"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                超时时间（毫秒）
-              </label>
-              <input
-                type="number"
-                value={playerFormData.timeout}
-                onChange={(e) =>
-                  setPlayerFormData({
-                    ...playerFormData,
-                    timeout: parseInt(e.target.value) || 10000,
-                  })
-                }
-                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                min="1000"
-                step="1000"
-              />
-            </div>
+      {/* 播放器编辑弹框 */}
+      <Modal
+        isOpen={!!(editingPlayer || isAddingPlayer)}
+        onClose={handleCancelPlayerEdit}
+        title={isAddingPlayer ? '添加iframe播放器' : '编辑iframe播放器'}
+        size="lg"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              播放器名称
+            </label>
+            <input
+              type="text"
+              value={playerFormData.name}
+              onChange={(e) =>
+                setPlayerFormData({ ...playerFormData, name: e.target.value })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="例如: 备用播放器1"
+            />
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleSavePlayer}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium"
-            >
-              保存
-            </button>
-            <button
-              onClick={handleCancelPlayerEdit}
-              className="px-6 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition font-medium"
-            >
-              取消
-            </button>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              播放器URL
+            </label>
+            <input
+              type="text"
+              value={playerFormData.url}
+              onChange={(e) =>
+                setPlayerFormData({ ...playerFormData, url: e.target.value })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="https://jx.example.com/?url="
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              优先级（数字越小越优先）
+            </label>
+            <input
+              type="number"
+              value={playerFormData.priority}
+              onChange={(e) =>
+                setPlayerFormData({
+                  ...playerFormData,
+                  priority: parseInt(e.target.value) || 1,
+                })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="1"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              超时时间（毫秒）
+            </label>
+            <input
+              type="number"
+              value={playerFormData.timeout}
+              onChange={(e) =>
+                setPlayerFormData({
+                  ...playerFormData,
+                  timeout: parseInt(e.target.value) || 10000,
+                })
+              }
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              min="1000"
+              step="1000"
+            />
           </div>
         </div>
-      )}
+        <div className="flex gap-3">
+          <button
+            onClick={handleSavePlayer}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium"
+          >
+            保存
+          </button>
+          <button
+            onClick={handleCancelPlayerEdit}
+            className="px-6 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition font-medium"
+          >
+            取消
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
