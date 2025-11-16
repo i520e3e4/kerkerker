@@ -39,7 +39,7 @@ interface LocalHlsPlayerProps {
 
 export function LocalHlsPlayer({
   videoUrl,
-  title,
+  title: _title, // eslint-disable-line @typescript-eslint/no-unused-vars
   settings,
   onProgress,
   onEnded,
@@ -58,10 +58,25 @@ export function LocalHlsPlayer({
   const networkRetryCount = useRef<number>(0);
   const mediaRetryCount = useRef<number>(0);
   const keyErrorCount = useRef<number>(0);
+  const timersRef = useRef<Set<NodeJS.Timeout>>(new Set()); // 存储所有定时器
+  
+  // 使用 ref 保存回调，避免 useEffect 依赖变化导致频繁重建
+  const onProgressRef = useRef(onProgress);
+  const onEndedRef = useRef(onEnded);
+  const onErrorRef = useRef(onError);
+  const settingsRef = useRef(settings);
   
   const MAX_NETWORK_RETRY = 3;
   const MAX_MEDIA_RETRY = 2;
   const MAX_KEY_ERROR = 5; // 密钥错误最多容忍5次
+
+  // 更新回调 ref
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+    onEndedRef.current = onEnded;
+    onErrorRef.current = onError;
+    settingsRef.current = settings;
+  });
 
   // 确保在客户端执行
   useEffect(() => {
@@ -84,9 +99,9 @@ export function LocalHlsPlayer({
     setIsLoading(false);
     
     if (!canRetry) {
-      onError?.();
+      onErrorRef.current?.();
     }
-  }, [onError]);
+  }, []);
 
   // 重试播放
   const handleRetry = useCallback(() => {
@@ -114,16 +129,35 @@ export function LocalHlsPlayer({
         const Artplayer = ArtplayerModule.default;
         const Hls = HlsModule.default;
 
-        // 清理旧实例
+        // 清理旧实例（先停止加载）
+        if (hlsRef.current) {
+          try {
+            hlsRef.current.stopLoad();
+            hlsRef.current.detachMedia();
+            hlsRef.current.destroy();
+          } catch {
+            // 忽略清理错误
+          }
+          hlsRef.current = null;
+        }
+
         if (artRef.current) {
-          artRef.current.destroy();
+          try {
+            if (artRef.current.video) {
+              artRef.current.video.pause();
+              artRef.current.video.src = '';
+              artRef.current.video.load();
+            }
+            artRef.current.destroy();
+          } catch {
+            // 忽略清理错误
+          }
           artRef.current = null;
         }
 
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
-          hlsRef.current = null;
-        }
+        // 清理所有定时器
+        timersRef.current.forEach(timer => clearTimeout(timer));
+        timersRef.current.clear();
 
         // HLS配置
         const hlsConfig = {
@@ -157,13 +191,18 @@ export function LocalHlsPlayer({
           fullscreenWeb: true,
           miniProgressBar: true,
           playsInline: true,
-          theme: settings.theme || '#ef4444',
+          theme: settingsRef.current.theme || '#ef4444',
           lang: 'zh-cn',
           moreVideoAttr: {
             crossOrigin: 'anonymous',
           },
           customType: {
             m3u8: (video: HTMLVideoElement, url: string) => {
+              // 检查组件是否已卸载
+              if (!isMountedRef.current) {
+                return;
+              }
+
               const hls = new Hls(hlsConfig);
               hlsRef.current = hls;
 
@@ -244,11 +283,13 @@ export function LocalHlsPlayer({
                         setPlayerError('network', errorMsg, true);
                         hls.stopLoad();
                       } else {
-                        setTimeout(() => {
-                          if (isMountedRef.current) {
+                        const timer = setTimeout(() => {
+                          if (isMountedRef.current && hlsRef.current) {
                             hls.startLoad();
                           }
+                          timersRef.current.delete(timer);
                         }, 1000 * networkRetryCount.current);
+                        timersRef.current.add(timer);
                       }
                       break;
 
@@ -259,11 +300,13 @@ export function LocalHlsPlayer({
                         setPlayerError('media', '视频格式错误或编码不支持', false);
                         hls.stopLoad();
                       } else {
-                        setTimeout(() => {
-                          if (isMountedRef.current) {
+                        const timer = setTimeout(() => {
+                          if (isMountedRef.current && hlsRef.current) {
                             hls.recoverMediaError();
                           }
+                          timersRef.current.delete(timer);
                         }, 500);
+                        timersRef.current.add(timer);
                       }
                       break;
 
@@ -306,7 +349,7 @@ export function LocalHlsPlayer({
 
         art.on('video:loadedmetadata', () => {
           // 恢复播放进度
-          if (settings.autoSaveProgress) {
+          if (settingsRef.current.autoSaveProgress) {
             const savedProgress = localStorage.getItem(`video_progress_${videoUrl}`);
             if (savedProgress) {
               try {
@@ -326,10 +369,11 @@ export function LocalHlsPlayer({
         // 播放进度更新
         art.on('video:timeupdate', () => {
           const currentTime = art.currentTime;
-          onProgress?.(currentTime);
+          onProgressRef.current?.(currentTime);
 
           // 自动保存播放进度
-          if (settings.autoSaveProgress && Math.floor(currentTime) % settings.progressSaveInterval === 0) {
+          const currentSettings = settingsRef.current;
+          if (currentSettings.autoSaveProgress && Math.floor(currentTime) % currentSettings.progressSaveInterval === 0) {
             localStorage.setItem(
               `video_progress_${videoUrl}`,
               JSON.stringify({
@@ -343,11 +387,11 @@ export function LocalHlsPlayer({
         // 播放结束
         art.on('video:ended', () => {
           // 清除播放进度
-          if (settings.autoSaveProgress) {
+          if (settingsRef.current.autoSaveProgress) {
             localStorage.removeItem(`video_progress_${videoUrl}`);
           }
           
-          onEnded?.();
+          onEndedRef.current?.();
         });
 
         // 播放错误
@@ -368,25 +412,53 @@ export function LocalHlsPlayer({
     return () => {
       isMountedRef.current = false;
       
+      // 1. 立即清理所有定时器，防止异步操作
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const timers = timersRef.current;
+      timers.forEach(timer => clearTimeout(timer));
+      timers.clear();
+      
+      // 2. 先停止 HLS 加载
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.stopLoad();
+          hlsRef.current.detachMedia();
+        } catch {
+          // 忽略错误
+        }
+      }
+      
+      // 3. 清理 Artplayer（会自动清理内部资源）
       if (artRef.current) {
         try {
+          const videoElement = artRef.current.video;
+          // 先销毁 Artplayer
           artRef.current.destroy();
+          // 再手动清理 video 元素
+          if (videoElement) {
+            videoElement.pause();
+            videoElement.src = '';
+            videoElement.load();
+            // 移除所有事件监听器
+            videoElement.removeAttribute('src');
+          }
         } catch {
-          // 静默处理清理错误
+          // 忽略错误
         }
         artRef.current = null;
       }
       
+      // 4. 最后销毁 HLS 实例
       if (hlsRef.current) {
         try {
           hlsRef.current.destroy();
         } catch {
-          // 静默处理清理错误
+          // 忽略错误
         }
         hlsRef.current = null;
       }
     };
-  }, [isClient, videoUrl, title, settings, getProxiedUrl, onProgress, onEnded, onError, setPlayerError, retryCount, useDirectPlay]);
+  }, [isClient, videoUrl, retryCount, useDirectPlay, getProxiedUrl, setPlayerError]);
 
   if (!isClient) {
     return (
