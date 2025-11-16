@@ -12,7 +12,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
   const handleSearch = () => {
     if (!searchKeyword.trim()) return;
-    router.push(`/search?q=${encodeURIComponent(searchKeyword)}`);
+    onClose(); // 先关闭弹窗
+    router.push(`/search?q=${encodeURIComponent(searchKeyword.trim())}`);
+    setSearchKeyword(""); // 清空输入
   };
 
   if (!isOpen) return null;

@@ -11,12 +11,119 @@ function SearchContent() {
   const queryKeyword = searchParams.get('q') || '';
   
   const [searchKeyword, setSearchKeyword] = useState(queryKeyword);
-  const [searchResults, setSearchResults] = useState<Drama[]>([]);
+  const [searchResults, setSearchResults] = useState<(Drama & { source: VodSource })[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [allSources, setAllSources] = useState<VodSource[]>([]);
   const [currentSource, setCurrentSource] = useState<VodSource | null>(null);
+  const [searchStats, setSearchStats] = useState<{ total: number; bySource: Record<string, number> }>({ total: 0, bySource: {} });
   
+  // 同步 URL 参数到本地搜索框状态
+  useEffect(() => {
+    setSearchKeyword(queryKeyword);
+  }, [queryKeyword]);
+  
+  // 执行搜索 - 并行搜索所有视频源
+  const performSearch = useCallback(async (keyword: string, sourceKey?: string) => {
+    if (!keyword.trim()) return;
+    
+    // 检查是否有视频源
+    if (allSources.length === 0) {
+      setSearchResults([]);
+      setSearched(true);
+      return;
+    }
+    
+    setLoading(true);
+    setSearched(true);
+    setSearchResults([]);
+    
+    try {
+      // 如果指定了 sourceKey，只搜索该源；否则搜索所有源
+      const sourcesToSearch = sourceKey 
+        ? allSources.filter(s => s.key === sourceKey)
+        : allSources;
+      
+      if (sourcesToSearch.length === 0) {
+        setSearchResults([]);
+        setLoading(false);
+        return;
+      }
+      
+      console.log(`🔍 开始搜索所有视频源 (${sourcesToSearch.length}个): ${keyword}`);
+      
+      // 并行搜索所有源
+      const searchPromises = sourcesToSearch.map(async (source) => {
+        try {
+          console.log(`  ⏳ 搜索源: ${source.name}...`);
+          const response = await fetch('/api/drama/list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: source,
+              page: 1,
+              limit: 50,
+              keyword: keyword.trim(),
+            }),
+          });
+
+          const result = await response.json();
+          
+          if (result.code === 200 && result.data?.list) {
+            console.log(`  ✅ ${source.name} 找到 ${result.data.list.length} 个结果`);
+            // 为每个结果添加源信息
+            return result.data.list.map((drama: Drama) => ({
+              ...drama,
+              source: source,
+            }));
+          } else {
+            console.log(`  ❌ ${source.name} 未找到结果`);
+            return [];
+          }
+        } catch (error) {
+          console.error(`  ❌ ${source.name} 搜索失败:`, error);
+          return [];
+        }
+      });
+
+      // 等待所有搜索完成
+      const results = await Promise.all(searchPromises);
+      
+      // 合并所有结果
+      const allResults = results.flat();
+      
+      // 计算统计信息
+      const stats = {
+        total: allResults.length,
+        bySource: {} as Record<string, number>,
+      };
+      
+      allResults.forEach(result => {
+        const sourceKey = result.source.key;
+        stats.bySource[sourceKey] = (stats.bySource[sourceKey] || 0) + 1;
+      });
+      
+      console.log(`\n📊 搜索完成: 总共找到 ${allResults.length} 个结果`);
+      console.log('各源结果数:', stats.bySource);
+      
+      setSearchResults(allResults);
+      setSearchStats(stats);
+      
+      // 如果指定了源，设置当前源
+      if (sourceKey) {
+        const selectedSource = allSources.find(s => s.key === sourceKey);
+        if (selectedSource) {
+          setCurrentSource(selectedSource);
+        }
+      }
+    } catch (error) {
+      console.error('搜索失败:', error);
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [allSources]);
+
   // 从数据库加载视频源配置
   useEffect(() => {
     const loadSources = async () => {
@@ -36,69 +143,12 @@ function SearchContent() {
     loadSources();
   }, []);
 
-  // 执行搜索
-  const performSearch = useCallback(async (keyword: string, sourceKey?: string) => {
-    if (!keyword.trim()) return;
-    
-    // 检查是否有视频源
-    if (allSources.length === 0) {
-      setSearchResults([]);
-      setSearched(true);
-      return;
-    }
-    
-    setLoading(true);
-    setSearched(true);
-    
-    try {
-      const source = sourceKey 
-        ? allSources.find(s => s.key === sourceKey) 
-        : currentSource;
-      
-      if (!source) {
-        setSearchResults([]);
-        setLoading(false);
-        return;
-      }
-      
-      setCurrentSource(source);
-      
-      console.log(`🔍 使用 ${source.name} 搜索: ${keyword}`);
-      
-      const response = await fetch('/api/drama/list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: source,
-          page: 1,
-          limit: 50,
-          keyword: keyword.trim(),
-        }),
-      });
-
-      const result = await response.json();
-      
-      if (result.code === 200 && result.data?.list) {
-        setSearchResults(result.data.list);
-        console.log(`✅ 找到 ${result.data.list.length} 个结果`);
-      } else {
-        setSearchResults([]);
-      }
-    } catch (error) {
-      console.error('搜索失败:', error);
-      setSearchResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentSource, allSources]);
-
-  // 初始搜索
+  // 当视频源加载完成且有搜索关键词时，执行搜索
   useEffect(() => {
-    if (queryKeyword) {
+    if (queryKeyword && allSources.length > 0) {
       performSearch(queryKeyword);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKeyword]);
+  }, [queryKeyword, allSources, performSearch]);
 
   // 处理搜索提交
   const handleSearch = () => {
@@ -106,17 +156,9 @@ function SearchContent() {
     router.push(`/search?q=${encodeURIComponent(searchKeyword.trim())}`);
   };
 
-  // 切换播放源并重新搜索
-  const handleSourceChange = (sourceKey: string) => {
-    if (searchKeyword.trim()) {
-      performSearch(searchKeyword.trim(), sourceKey);
-    }
-  };
-
   // 点击影片 - 直接跳转播放页面
-  const handlePlayClick = (drama: Drama) => {
-    if (!currentSource) return;
-    router.push(`/play/${drama.id}?source=${currentSource.key}`);
+  const handlePlayClick = (drama: Drama & { source: VodSource }) => {
+    router.push(`/play/${drama.id}?source=${drama.source.key}`);
   };
 
   // 返回首页
@@ -172,22 +214,36 @@ function SearchContent() {
               </div>
             </div>
 
-            {/* 播放源选择器 */}
-            {allSources.length > 0 && currentSource ? (
+            {/* 播放源筛选器 */}
+            {allSources.length > 0 && searchResults.length > 0 ? (
               <select
-                value={currentSource.key}
-                onChange={(e) => handleSourceChange(e.target.value)}
+                value={currentSource?.key || 'all'}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'all') {
+                    setCurrentSource(null);
+                  } else {
+                    const selectedSource = allSources.find(s => s.key === value);
+                    setCurrentSource(selectedSource || null);
+                  }
+                }}
                 className="bg-gray-900/80 border border-gray-700/50 rounded-lg px-3 md:px-4 py-2.5 md:py-3 text-xs md:text-sm outline-none hover:border-gray-600 hover:bg-gray-900 transition-all cursor-pointer shadow-lg"
               >
-                {allSources.map(source => (
-                  <option key={source.key} value={source.key}>{source.name}</option>
-                ))}
+                <option value="all">全部源 ({searchResults.length})</option>
+                {allSources.map(source => {
+                  const count = searchStats.bySource[source.key] || 0;
+                  return (
+                    <option key={source.key} value={source.key}>
+                      {source.name} ({count})
+                    </option>
+                  );
+                })}
               </select>
-            ) : (
+            ) : allSources.length === 0 ? (
               <div className="bg-red-500/10 border border-red-500/50 rounded-lg px-4 py-2.5 text-xs md:text-sm text-red-400">
                 未配置视频源
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </nav>
@@ -216,8 +272,8 @@ function SearchContent() {
           <div className="flex items-center justify-center py-24 md:py-32">
             <div className="text-center animate-fade-in">
               <div className="animate-spin rounded-full h-12 w-12 md:h-16 md:w-16 border-4 border-gray-700 border-t-red-600 mx-auto mb-4" />
-              <p className="text-gray-300 text-base md:text-lg font-medium">正在搜索...</p>
-              {currentSource && <p className="text-gray-500 text-xs md:text-sm mt-2">使用 {currentSource.name} 搜索中</p>}
+              <p className="text-gray-300 text-base md:text-lg font-medium">正在搜索所有视频源...</p>
+              <p className="text-gray-500 text-xs md:text-sm mt-2">搜索 {allSources.length} 个视频源中</p>
             </div>
           </div>
         ) : searched ? (
@@ -227,16 +283,31 @@ function SearchContent() {
                 <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-white mb-2">
                   搜索结果
                 </h2>
-                <p className="text-gray-400 text-xs md:text-sm">
-                  在 <span className="text-red-500 font-semibold">{currentSource?.name || '未知源'}</span> 中找到 <span className="text-white font-semibold">{searchResults.length}</span> 个结果
+                <p className="text-gray-400 text-xs md:text-sm mb-2">
+                  在 <span className="text-red-500 font-semibold">{allSources.length} 个视频源</span> 中找到 <span className="text-white font-semibold">{searchResults.length}</span> 个结果
                   {queryKeyword && <> · 关键词: <span className="text-white font-medium">&ldquo;{queryKeyword}&rdquo;</span></>}
                 </p>
+                {/* 各源结果统计 */}
+                {searchStats.total > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {Object.entries(searchStats.bySource).map(([sourceKey, count]) => {
+                      const source = allSources.find(s => s.key === sourceKey);
+                      return (
+                        <span key={sourceKey} className="text-xs bg-gray-800/50 px-2 py-1 rounded">
+                          {source?.name}: <span className="text-white font-medium">{count}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 md:gap-4 lg:gap-5">
-                {searchResults.map((drama) => (
+                {searchResults
+                  .filter(drama => !currentSource || drama.source.key === currentSource.key)
+                  .map((drama) => (
                   <div
-                    key={drama.id}
+                    key={`${drama.source.key}-${drama.id}`}
                     onClick={() => handlePlayClick(drama)}
                     className="group cursor-pointer transition-all duration-300 hover:scale-105 hover:z-10"
                   >
@@ -270,11 +341,18 @@ function SearchContent() {
                       </div>
 
                       {/* 标签 */}
-                      {drama.remarks && (
-                        <div className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded">
-                          {drama.remarks}
+                      <div className="absolute top-2 left-2 right-2 flex justify-between items-start gap-1">
+                        {/* 视频源标签 */}
+                        <div className="bg-blue-600/90 backdrop-blur-sm text-white text-xs px-2 py-1 rounded shadow-lg">
+                          {drama.source.name}
                         </div>
-                      )}
+                        {/* 更新标签 */}
+                        {drama.remarks && (
+                          <div className="bg-red-600/90 backdrop-blur-sm text-white text-xs px-2 py-1 rounded shadow-lg">
+                            {drama.remarks}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* 信息 */}
@@ -313,8 +391,11 @@ function SearchContent() {
                 </svg>
               </div>
               <h3 className="text-xl font-bold text-white mb-2">未找到相关内容</h3>
-              <p className="text-gray-400 mb-6">
-                在 {currentSource?.name || '当前源'} 中搜索 &ldquo;{queryKeyword}&rdquo; 没有结果
+              <p className="text-gray-400 mb-2">
+                在所有 {allSources.length} 个视频源中搜索 &ldquo;{queryKeyword}&rdquo; 没有结果
+              </p>
+              <p className="text-gray-500 text-sm mb-6">
+                已搜索: {allSources.map(s => s.name).join('、')}
               </p>
               <div className="flex items-center space-x-4">
                 <button
@@ -330,24 +411,6 @@ function SearchContent() {
                   重新搜索
                 </button>
               </div>
-              
-              {/* 切换其他源提示 */}
-              {currentSource && allSources.length > 1 && (
-                <div className="mt-8 text-center">
-                  <p className="text-gray-500 text-sm mb-3">或尝试切换其他播放源：</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {allSources.filter(s => s.key !== currentSource.key).slice(0, 5).map(source => (
-                    <button
-                      key={source.key}
-                      onClick={() => handleSourceChange(source.key)}
-                      className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white text-sm rounded transition-colors"
-                    >
-                      {source.name}
-                    </button>
-                  ))}
-                </div>
-                </div>
-              )}
             </div>
           )
         ) : (
@@ -359,8 +422,11 @@ function SearchContent() {
               </svg>
             </div>
             <h3 className="text-xl font-bold text-white mb-2">搜索影视资源</h3>
-            <p className="text-gray-400">
-              输入关键词开始搜索{currentSource && <> · 当前使用 {currentSource.name}</>}
+            <p className="text-gray-400 mb-2">
+              输入关键词，将在 {allSources.length} 个视频源中搜索
+            </p>
+            <p className="text-gray-500 text-sm">
+              {allSources.map(s => s.name).join('、')}
             </p>
           </div>
         )}
