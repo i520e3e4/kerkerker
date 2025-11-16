@@ -59,13 +59,33 @@ export function UnifiedPlayer({
   const [currentMode, setCurrentMode] = useState<'iframe' | 'local' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const previousModeRef = useRef<'iframe' | 'local' | undefined>(undefined);
+  const switchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  
+  // 使用 ref 保存回调，避免频繁重建
+  const onIframePlayerSwitchRef = useRef(onIframePlayerSwitch);
 
-  // 加载播放器配置
+  // 更新回调 ref
+  useEffect(() => {
+    onIframePlayerSwitchRef.current = onIframePlayerSwitch;
+  });
+
+  // 设置 mounted 状态
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // 加载播放器配置（只在挂载时加载一次）
   useEffect(() => {
     const loadConfig = async () => {
       try {
         const response = await fetch('/api/player-config');
         const result = await response.json();
+        
+        if (!isMountedRef.current) return;
         
         if (result.code === 200 && result.data) {
           setPlayerConfig(result.data);
@@ -82,53 +102,81 @@ export function UnifiedPlayer({
           }
         }
       } catch (error) {
+        if (!isMountedRef.current) return;
+        
         if (process.env.NODE_ENV === 'development') {
           console.error('[Player Config Load Failed]', error);
         }
         setCurrentMode(externalMode || 'iframe');
       } finally {
-        setIsLoading(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadConfig();
-  }, [externalMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 只在挂载时加载一次
 
   // 监听外部mode变化，使用ref避免无限循环
   useEffect(() => {
-    // 只有当externalMode真正改变时才触发
-    if (externalMode && externalMode !== previousModeRef.current) {
+    // 清理之前的定时器
+    if (switchTimerRef.current) {
+      clearTimeout(switchTimerRef.current);
+      switchTimerRef.current = null;
+    }
+    
+    // 检查 externalMode 是否真正改变
+    if (externalMode !== previousModeRef.current) {
       // 更新ref
       previousModeRef.current = externalMode;
+      
+      // 如果 externalMode 为 undefined，不做处理（使用配置中的模式）
+      if (externalMode === undefined) {
+        return;
+      }
       
       // 如果currentMode已经有值且与新模式不同，先清空以卸载旧播放器
       if (currentMode && currentMode !== externalMode) {
         setCurrentMode(null);
         
         // 延迟后设置新模式
-        const timer = setTimeout(() => {
+        switchTimerRef.current = setTimeout(() => {
+          if (!isMountedRef.current) return;
           setCurrentMode(externalMode);
+          switchTimerRef.current = null;
         }, 100);
-        
-        return () => clearTimeout(timer);
       } else if (!currentMode) {
         // 首次加载，直接设置
         setCurrentMode(externalMode);
       }
     }
+    
+    // 清理函数
+    return () => {
+      if (switchTimerRef.current) {
+        clearTimeout(switchTimerRef.current);
+        switchTimerRef.current = null;
+      }
+    };
   }, [externalMode, currentMode]);
 
   // 处理播放器错误（降级）
   const handlePlayerError = useCallback(() => {
-    if (currentMode === 'local') {
-      setCurrentMode('iframe');
-    }
-  }, [currentMode]);
+    // 使用 setCurrentMode 的函数式更新，避免依赖 currentMode
+    setCurrentMode(prevMode => {
+      if (prevMode === 'local') {
+        return 'iframe';
+      }
+      return prevMode;
+    });
+  }, []);
 
   // 处理播放器切换（用于iframe模式）
   const handlePlayerSwitch = useCallback((playerIndex: number) => {
-    onIframePlayerSwitch?.(playerIndex);
-  }, [onIframePlayerSwitch]);
+    onIframePlayerSwitchRef.current?.(playerIndex);
+  }, []);
 
   if (isLoading || !playerConfig) {
     return (
