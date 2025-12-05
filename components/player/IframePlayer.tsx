@@ -49,27 +49,30 @@ export function IframePlayer({
     onPlayerSwitchRef.current = onPlayerSwitch;
   });
 
-  // 过滤启用的播放器并按优先级排序，如果视频源有专属播放器则添加到第一位
+  // 通用解析播放器列表
+  const backupPlayers = useMemo(() => 
+    players.filter(p => p.enabled).sort((a, b) => a.priority - b.priority),
+    [players]
+  );
+  
+  // 过滤启用的播放器并按优先级排序
   const enabledPlayers = useMemo(() => {
-    const backupPlayers = players
-      .filter(p => p.enabled)
-      .sort((a, b) => a.priority - b.priority);
-    
-    // 如果视频源有专属播放器，添加到第一位
+    // 如果视频源有专属播放器，优先使用，并把通用播放器放在后面作为备选
     if (vodSource?.playUrl) {
       const vodSourcePlayer: IframePlayerConfig = {
         id: `vod_source_${vodSource.key}`,
         name: `${vodSource.name}播放器`,
         url: vodSource.playUrl,
         priority: 0,
-        timeout: 10000,
+        timeout: 15000, // 给视频源播放器更多时间
         enabled: true,
       };
+      // 视频源播放器 + 通用播放器作为备选
       return [vodSourcePlayer, ...backupPlayers];
     }
     
     return backupPlayers;
-  }, [players, vodSource]);
+  }, [vodSource, backupPlayers]);
 
   const currentPlayer = enabledPlayers[currentPlayerIndex];
   const playerUrl = currentPlayer ? 
