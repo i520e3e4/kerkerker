@@ -14,6 +14,7 @@ interface AvailableSource {
   vod_id: string | number;
   vod_name: string;
   match_confidence: "high" | "medium" | "low";
+  priority: number;  // 视频源优先级，数值越小越靠前
 }
 
 interface CachedMatchData {
@@ -228,8 +229,13 @@ export default function MovieDetailPage() {
                 // 如果找到匹配，立即添加到列表
                 if (data.match) {
                   allMatches.push(data.match);
-                  // 按置信度排序：high > medium > low
+                  // 按优先级排序（数值越小越靠前），同优先级按置信度排序
                   const sorted = [...allMatches].sort((a, b) => {
+                    // 先按 priority 排序
+                    if (a.priority !== b.priority) {
+                      return a.priority - b.priority;
+                    }
+                    // 同 priority 按置信度排序：high > medium > low
                     const order = { high: 3, medium: 2, low: 1 };
                     return order[b.match_confidence] - order[a.match_confidence];
                   });
