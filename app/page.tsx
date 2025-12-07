@@ -55,8 +55,8 @@ export default function HomePage() {
       ) : error ? (
         /* 错误状态 */
         <ErrorState error={error} onRetry={refetch} />
-      ) : categories.length === 0 && top250Movies.length === 0 ? (
-        /* 空状态 */
+      ) : heroMovies.length === 0 && categories.length === 0 && top250Movies.length === 0 ? (
+        /* 空状态 - 只有当所有数据都为空时才显示 */
         <EmptyState onRetry={refetch} />
       ) : (
         <>
